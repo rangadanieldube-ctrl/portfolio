@@ -1,0 +1,45 @@
+=============================================================
+  CREDITS & LICENSING
+=============================================================
+
+This site is built on a 3D interactive room template created by
+Muhammad Bilal Khan (https://www.patreon.com/c/MuhammadBilalKhan).
+
+The template — the room model, the shader work, the scroll
+choreography, the draco setup, the modal system, the social
+phone meshes — is his work. He sells full-access licenses on
+Patreon. If you want to build a site like this, buy it from him.
+He earned it.
+
+    Patreon:  https://www.patreon.com/c/MuhammadBilalKhan
+
+The content inside the room — every thumbnail, every video,
+every project description, the research, the layouts — is mine
+(Daniel Ranga Dube). It is not licensed for reuse.
+
+-------------------------------------------------------------
+  If you found this repo and want a site like it
+-------------------------------------------------------------
+
+Do the right thing:
+  1. Go to Bilal's Patreon, buy the template.
+  2. Hire a designer for your own content, or build it yourself.
+  3. Credit him in your own project.
+
+Do not fork this repo and ship it as your own.DONT BE AN ASSHOLE, Do not re-skin
+it and pretend you made the room. Do not strip the credit and
+sell it as a service to someone else.
+
+Being broke is not an excuse to steal someone's work. It is a
+reason to credit them loudly and support them when you can.
+
+-------------------------------------------------------------
+  License
+-------------------------------------------------------------
+
+Template (room.glb, main.*.js, main.*.css, shaders, overlay):
+    Commercial license held by Daniel Ranga Dube,
+    from Muhammad Bilal Khan via Patreon. 
+Content (thumbnails, videos, project copy, DDI, research,
+contact information):
+    Copyright (c) 2026 Daniel Ranga Dube. All rights reserved.
