@@ -1,0 +1,1430 @@
+﻿3D INTERACTIVE PORTFOLIO TEMPLATE
+TECHNICAL SETUP & CUSTOMISATION GUIDE
+USE THIS GUIDE AS IS OTHERWISE YOU ARE GOING TO EXPERIENCE 
+Implementation Reference
+Primary asset: room.glb
+Runtime: Three.js / WebGL
+Scene authoring: Blender
+Geometry compression: Draco
+Interface: HTML + CSS
+Runtime code: main.*.js
+Visual effects: GLSL shaders
+======================================================================
+1. TEMPLATE ARCHITECTURE
+======================================================================
+The template is easiest to understand as several layers that meet at
+runtime.
+Blender owns the authored scene, the GLB carries the geometry and scene
+graph, JavaScript starts the renderer and controls interaction, CSS
+handles interface presentation, and shaders provide GPU-side visual
+effects.
+A typical project structure looks like this:
+project/
+|
++-- index.html
++-- room.glb
++-- main.[hash].js
++-- main.[hash].css
++-- shaders/
+| +-- vertex.glsl
+| +-- fragment.glsl
++-- draco/
+| +-- draco_decoder.js
+| +-- draco_decoder.wasm
+| +-- draco_wasm_wrapper.js
++-- assets/
++-- images/
++-- video/
+The HTML file should be treated as the visible entry document. It
+normally contains the canvas or a container for it, along with overlay
+elements.
+The JavaScript file is responsible for connecting those elements to the
+Three.js scene.
+TYPICAL RUNTIME SEQUENCE
+Browser opens index.html
+|
+v
+main.[hash].js executes
+|
+v
+renderer / camera / scene are created
+|
+v
+GLTFLoader requests room.glb
+|
+v
+Draco decoder is initialised
+|
+v
+scene graph is inserted
+|
+v
+interaction and animation begin
+|
+v
+HTML overlays respond to selected objects
+A change in one layer can therefore appear to be a problem in another.
+For example, an object that fails to highlight may have:
+   * the wrong Blender name
+   * an unexpected parent
+   * an incorrect runtime reference
+   * a missing interaction target
+   * an incorrect pointer calculation
+Keep these layers separate while debugging.
+======================================================================
+2. BEFORE EDITING ANYTHING
+Make a working copy of the entire template before changing files.
+portfolio-template/
+portfolio-template-backup/
+portfolio-template-working/
+Open the working copy and establish which files are source files and
+which are generated build artifacts.
+A file such as:
+main.7d9f3.js
+may be a generated bundle rather than the original source file.
+Before making modifications, perform a baseline test.
+Check:
+   * the room loads
+   * the camera works
+   * every interactive object responds
+   * overlays appear
+   * external links work
+   * videos or thumbnails load
+   * there are no obvious browser-console errors
+Do not use the browser console as the only test.
+A page can render successfully while individual interaction targets,
+video paths or overlay links remain broken.
+======================================================================
+3. BLENDER: EDITING room.glb
+Blender should remain the editable master.
+The exported GLB should be treated as the web delivery asset rather than
+the original working file.
+RECOMMENDED BLENDER WORKFLOW
+   1. Open the original .blend file.
+   2. Save a working copy.
+   3. Inspect the Outliner.
+   4. Preserve objects used by the runtime.
+   5. Edit materials, geometry and decorative assets.
+   6. Apply transforms where appropriate.
+   7. Export a fresh GLB.
+   8. Replace room.glb.
+   9. Test the browser version.
+Interactive objects should be treated differently from decorative
+objects.
+A decorative chair can generally be renamed or repositioned without
+affecting the application.
+An object that JavaScript searches for by name may have dependencies
+outside Blender.
+EXAMPLE SCENE STRUCTURE
+PortfolioRoom
+|
++-- Floor
++-- Desk
+| +-- Monitor
+| +-- Keyboard
+| +-- PortfolioButton
++-- Wall
++-- Shelf
+| +-- Book01
+| +-- Book02
++-- CameraTarget
+Names are case-sensitive once they reach the browser.
+For example:
+PortfolioButton
+is different from:
+portfoliobutton
+and:
+Portfolio_Button
+======================================================================
+4. OBJECT NAMING AND RUNTIME REFERENCES
+Interactive objects are normally discovered by name or by being added
+to an explicit target array.
+Example:
+--- CODE START ---
+const portfolioButton =
+scene.getObjectByName("PortfolioButton");
+const linkedinButton =
+scene.getObjectByName("LinkedInButton");
+interactiveObjects.push(portfolioButton);
+interactiveObjects.push(linkedinButton);
+--- CODE END ---
+If the same name appears multiple times, object lookup can become
+ambiguous.
+Keep interactive names unique.
+It is possible to rename a loaded object at runtime, but this does not
+rename the original object inside the GLB.
+For example:
+--- CODE START ---
+const object =
+scene.getObjectByName("PortfolioButton");
+if (object) {
+object.name = "PortfolioButtonActive";
+}
+--- CODE END ---
+After this operation, the runtime object has a different name from the
+object originally exported from Blender.
+For a template, stable names are preferable.
+Use variables or userData for runtime state where possible.
+--- CODE START ---
+object.userData.active = true;
+object.userData.projectId = "ddi";
+--- CODE END ---
+======================================================================
+5. DRACO COMPRESSION
+Draco is used for geometry compression in glTF/GLB workflows.
+A project using Draco normally contains decoder assets such as:
+draco/
+|
++-- draco_decoder.js
++-- draco_decoder.wasm
++-- draco_wasm_wrapper.js
+The decoder files should come from a compatible Three.js distribution.
+A typical setup is:
+--- CODE START ---
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./draco/");
+const loader = new GLTFLoader();
+loader.setDRACOLoader(dracoLoader);
+--- CODE END ---
+The decoder path is resolved by the browser.
+For this reason, relative paths are useful when the project is hosted
+inside a project directory.
+For example:
+--- CODE START ---
+"./draco/"
+--- CODE END ---
+rather than:
+--- CODE START ---
+"/draco/"
+--- CODE END ---
+The second form points to the domain root.
+This matters when the site is deployed under a path such as:
+https://example.com/portfolio/
+rather than:
+https://example.com/
+======================================================================
+6. EXPORTING FROM BLENDER
+GLB export settings vary between Blender versions.
+A typical export configuration is:
+Format:
+glTF Binary (.glb)
+Include:
+Selected Objects
+Transform:
++Y Up
+Geometry:
+Apply Modifiers
+Animation:
+Export only required animations
+Be careful when using Selected Objects.
+The application may depend on objects that do not appear visually
+important.
+For example:
+CameraTarget
+InteractionAnchor
+Empty
+Light
+may be referenced by JavaScript.
+Exporting only the furniture could therefore remove objects required by
+the runtime.
+Always retain the .blend file as the master.
+The .glb is the web output.
+======================================================================
+7. MAIN JAVASCRIPT FILE
+The main JavaScript file is the central integration point.
+Depending on the template, it may be:
+   * original source code
+   * transpiled JavaScript
+   * a bundled file
+   * a minified build artifact
+A basic Three.js setup can look like this:
+--- CODE START ---
+import * as THREE from "three";
+import {
+GLTFLoader
+} from "three/addons/loaders/GLTFLoader.js";
+import {
+DRACOLoader
+} from "three/addons/loaders/DRACOLoader.js";
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(
+45,
+window.innerWidth / window.innerHeight,
+0.1,
+1000
+);
+const renderer = new THREE.WebGLRenderer({
+antialias: true,
+alpha: true
+});
+renderer.setPixelRatio(
+Math.min(window.devicePixelRatio, 2)
+);
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
+document.body.appendChild(
+renderer.domElement
+);
+--- CODE END ---
+If the supplied file is generated by a build process, direct edits may
+be overwritten when the application is rebuilt.
+For long-term maintenance, identify the original source file where
+possible.
+======================================================================
+8. LOADING THE GLB
+The GLB is loaded asynchronously.
+--- CODE START ---
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./draco/");
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(
+dracoLoader
+);
+gltfLoader.load(
+"./room.glb",
+(gltf) => {
+
+
+    scene.add(gltf.scene);
+
+
+    window.portfolioScene =
+        gltf.scene;
+
+
+},
+
+
+(progress) => {
+
+
+    if (progress.total) {
+
+
+        const percent =
+            progress.loaded /
+            progress.total *
+            100;
+
+
+        console.log(
+            `Loading: ${percent.toFixed(1)}%`
+        );
+    }
+},
+
+
+(error) => {
+
+
+    console.error(
+        "GLB loading failed:",
+        error
+    );
+}
+
+
+);
+--- CODE END ---
+The loaded scene is asynchronous.
+Therefore, code that expects a particular mesh should normally execute
+after the GLB has loaded.
+For example:
+--- CODE START ---
+gltfLoader.load(
+"./room.glb",
+(gltf) => {
+   scene.add(gltf.scene);
+
+
+    const button =
+        gltf.scene.getObjectByName(
+            "PortfolioButton"
+        );
+
+
+    // Continue setup here.
+}
+
+
+);
+--- CODE END ---
+Do not assume that interaction code will automatically wait for the
+model.
+======================================================================
+9. RAYCASTING AND CLICKABLE OBJECTS
+Three.js raycasting is commonly used for interaction.
+--- CODE START ---
+const raycaster =
+new THREE.Raycaster();
+const pointer =
+new THREE.Vector2();
+--- CODE END ---
+A pointer event can then update the ray:
+--- CODE START ---
+function onPointerMove(event) {
+const rect =
+    renderer.domElement
+        .getBoundingClientRect();
+
+
+pointer.x =
+    event.clientX / rect.width;
+
+
+pointer.y =
+    event.clientY / rect.height;
+
+
+raycaster.setFromCamera(
+    pointer,
+    camera
+);
+
+
+const hits =
+    raycaster.intersectObjects(
+        interactiveObjects
+    );
+
+
+if (hits.length) {
+
+
+    document.body.style.cursor =
+        "pointer";
+}
+
+
+}
+--- CODE END ---
+The interactive target array can contain the objects that should
+respond.
+--- CODE START ---
+const interactiveObjects = [];
+interactiveObjects.push(
+portfolioButton
+);
+interactiveObjects.push(
+linkedinButton
+);
+--- CODE END ---
+For nested GLB structures, consider whether the object being tested is
+a Group or an actual Mesh.
+======================================================================
+10. HTML OVERLAY LAYER
+The 3D scene and interface overlays should normally share a parent
+container.
+Example:
+--- CODE START ---
+<canvas id="webgl"></canvas>
+
+
+<div id="overlay">
+
+
+    <div id="project-panel">
+
+
+        <h2>
+            Project title
+        </h2>
+
+
+        <p>
+            Project description.
+        </p>
+
+
+        <a
+            id="project-link"
+            href="#"
+        >
+            Open project
+        </a>
+
+
+    </div>
+
+
+</div>
+
+
+--- CODE END ---
+CSS:
+--- CODE START ---
+#portfolio-root {
+position: relative;
+
+
+width: 100vw;
+height: 100vh;
+
+
+overflow: hidden;
+
+
+}
+#webgl {
+display: block;
+
+
+width: 100%;
+height: 100%;
+
+
+}
+#overlay {
+position: absolute;
+
+
+inset: 0;
+
+
+pointer-events: none;
+
+
+}
+#project-panel {
+pointer-events: auto;
+
+
+}
+--- CODE END ---
+Keep HTML IDs stable if JavaScript accesses them using:
+document.getElementById()
+The HTML provides the document interface surrounding the renderer.
+The 3D scene itself remains defined by the GLB and Three.js runtime.
+======================================================================
+11. CSS AND STACKING
+A simple stacking arrangement is:
+--- CODE START ---
+#webgl {
+position: absolute;
+
+
+inset: 0;
+
+
+z-index: 0;
+
+
+}
+#overlay {
+position: absolute;
+
+
+inset: 0;
+
+
+z-index: 10;
+
+
+}
+--- CODE END ---
+An overlay can unintentionally intercept pointer events.
+This is why:
+pointer-events: none;
+can be applied to the general overlay while specific interactive panels
+restore pointer interaction.
+--- CODE START ---
+#project-panel {
+pointer-events: auto;
+}
+--- CODE END ---
+Avoid changing several positioning properties simultaneously while
+debugging.
+======================================================================
+12. SHADER FILES
+GLSL files contain GPU-side shader programs.
+For example:
+shaders/
+|
++-- vertex.glsl
++-- fragment.glsl
+A ShaderMaterial can use their source:
+--- CODE START ---
+const material =
+new THREE.ShaderMaterial({
+   vertexShader:
+        vertexShaderSource,
+
+
+    fragmentShader:
+        fragmentShaderSource,
+
+
+    uniforms: {
+
+
+        uTime: {
+            value: 0
+        },
+
+
+        uIntensity: {
+            value: 0.35
+        }
+    },
+
+
+    transparent: true
+});
+
+
+--- CODE END ---
+Uniforms must be connected explicitly.
+For example:
+--- CODE START ---
+function animate(time) {
+material.uniforms.uTime.value =
+    time * 0.001;
+
+
+renderer.render(
+    scene,
+    camera
+);
+
+
+requestAnimationFrame(
+    animate
+);
+
+
+}
+requestAnimationFrame(
+animate
+);
+--- CODE END ---
+A shader uniform does not automatically connect to an arbitrary
+JavaScript variable with the same name.
+======================================================================
+13. ANIMATION LOOP
+The basic rendering loop is:
+--- CODE START ---
+function animate() {
+requestAnimationFrame(
+    animate
+);
+
+
+// scene updates
+
+
+// camera updates
+
+
+// shader uniforms
+
+
+// object animations
+
+
+renderer.render(
+    scene,
+    camera
+);
+
+
+}
+animate();
+--- CODE END ---
+Avoid repeatedly performing expensive operations such as:
+scene.getObjectByName(...)
+or large DOM queries every frame.
+Resolve stable references during initialisation.
+For GLB animation clips, an AnimationMixer can be used.
+--- CODE START ---
+const mixer =
+new THREE.AnimationMixer(
+gltf.scene
+);
+--- CODE END ---
+Then update it using elapsed time.
+======================================================================
+14. RESPONSIVE BEHAVIOUR
+The renderer should respond to browser size changes.
+--- CODE START ---
+function onResize() {
+const width =
+    window.innerWidth;
+
+
+const height =
+    window.innerHeight;
+
+
+renderer.setSize(
+    width,
+    height
+);
+
+
+camera.aspect =
+    width / height;
+
+
+camera.updateProjectionMatrix();
+
+
+}
+window.addEventListener(
+"resize",
+onResize
+);
+--- CODE END ---
+If the renderer occupies a specific container rather than the entire
+browser window, use the container dimensions instead.
+Device pixel ratio should also be considered.
+--- CODE START ---
+renderer.setPixelRatio(
+Math.min(
+window.devicePixelRatio,
+2
+)
+);
+--- CODE END ---
+Very high pixel ratios can increase GPU workload considerably.
+======================================================================
+15. PORTFOLIO CONTENT SLOTS
+The visual objects can represent individual portfolio projects.
+A central configuration object makes the content easier to maintain.
+--- CODE START ---
+const projects = {
+ddi: {
+
+
+    title:
+        "DUBE-Dropleton Index",
+
+
+    description:
+        "Independent company analysis framework.",
+
+
+    link:
+        "./projects/ddi/index.html",
+
+
+    thumbnail:
+        "./assets/images/ddi.webp"
+},
+
+
+linkedin: {
+
+
+    title:
+        "LinkedIn",
+
+
+    description:
+        "Profile and selected analysis.",
+
+
+    link:
+        "https://www.linkedin.com/",
+
+
+    thumbnail:
+        "./assets/images/linkedin.webp"
+}
+
+
+};
+--- CODE END ---
+The scene logic can then retrieve the corresponding project.
+--- CODE START ---
+const selectedProject =
+projects.ddi;
+--- CODE END ---
+Keeping content separate from rendering logic makes it easier to replace
+a thumbnail or description without rebuilding the scene.
+======================================================================
+16. VIDEO AND WEBP ASSETS
+Short preview videos can be converted into lightweight animated WebP
+files.
+Example:
+--- CODE START ---
+ffmpeg -i preview.mp4
+-vf "fps=12,scale=960:-1:flags=lanczos"
+-c:v libwebp
+-loop 0
+preview.webp
+--- CODE END ---
+For a short portfolio preview, a resolution such as 960 pixels wide may
+be sufficient.
+Do not automatically use the largest available source file.
+For example:
+3840 x 2160
+is unnecessary if the thumbnail is ultimately displayed at:
+480 x 270
+Keep asset names simple:
+ddi.webp
+linkedin.webp
+excel.webp
+acg.webp
+Avoid inconsistent filename casing.
+======================================================================
+17. EXTERNAL LINKS
+When a portfolio object opens an external page:
+--- CODE START ---
+function openProject(url) {
+window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+);
+
+
+}
+--- CODE END ---
+Alternatively:
+--- CODE START ---
+window.location.href = url;
+--- CODE END ---
+Use the appropriate method depending on whether the portfolio should
+remain open.
+External links should be attached to an intentional user action.
+======================================================================
+18. LOCAL DEVELOPMENT
+Do not rely exclusively on opening:
+index.html
+directly from the filesystem.
+A local HTTP server is preferable.
+For Python:
+--- CODE START ---
+python -m http.server 8000
+--- CODE END ---
+Then open:
+http://localhost:8000/
+This allows browser requests for:
+   * JavaScript modules
+   * GLB files
+   * shaders
+   * images
+   * video
+   * decoder assets
+to behave more like a deployed website.
+If a file fails, inspect the Network tab.
+For example:
+404 room.glb
+is a path problem rather than a Three.js rendering problem.
+======================================================================
+19. STATIC DEPLOYMENT
+A basic project may look like:
+repository/
+|
++-- portfolio/
+|
++-- index.html
++-- room.glb
++-- main.js
++-- main.css
++-- shaders/
++-- draco/
++-- assets/
+Asset paths must match the deployed location.
+For example:
+--- CODE START ---
+"./room.glb"
+--- CODE END ---
+and:
+--- CODE START ---
+"./draco/"
+--- CODE END ---
+are relative to the document location.
+A path such as:
+--- CODE START ---
+"/room.glb"
+--- CODE END ---
+points to the domain root.
+This distinction becomes important when the project is deployed below a
+root path.
+Also remember that:
+Room.glb
+and:
+room.glb
+may be treated as different files on production servers.
+======================================================================
+20. REPLACING room.glb
+When the Blender scene has been changed:
+old room.glb
+|
+v
+new room.glb
+Replace the existing asset with the newly exported file.
+Before doing so, preserve the previous version:
+room-old.glb
+room-new.glb
+Then rename the selected version:
+room.glb
+Browser caching can sometimes make it appear that the old model is still
+loading.
+A temporary cache-busting query can be used during testing:
+--- CODE START ---
+loader.load(
+"./room.glb?v=2",
+...
+);
+--- CODE END ---
+After testing, keep the final asset path consistent.
+======================================================================
+21. PERFORMANCE
+Draco compression primarily affects geometry transfer size.
+It does not eliminate the cost of:
+   * textures
+   * materials
+   * draw calls
+   * shadows
+   * post-processing
+   * high-resolution rendering
+   * animation
+   * transparency
+For example:
+--- CODE START ---
+renderer.setPixelRatio(
+Math.min(
+window.devicePixelRatio,
+2
+)
+);
+--- CODE END ---
+can prevent very high device pixel ratios from creating unnecessarily
+large render targets.
+Texture dimensions should also be inspected.
+A small GLB can still use a significant amount of memory if it contains
+several large textures.
+======================================================================
+22. DEBUGGING ORDER
+When something breaks, change one layer at a time.
+   1. Console
+Check JavaScript and module errors.
+   2. Network
+Check 404s and failed assets.
+   3. GLB
+Check scene hierarchy and object names.
+   4. Runtime
+Check object existence and transforms.
+   5. Interaction
+Check raycaster targets.
+   6. DOM/CSS
+Check overlay and pointer behaviour.
+   7. Performance
+Check frame rate and memory.
+If the entire page becomes blank after editing JavaScript, restore the
+last working JavaScript version before changing the GLB.
+This keeps runtime and asset problems separate.
+======================================================================
+23. PRACTICAL CUSTOMISATION SEQUENCE
+For a portfolio update, use a controlled sequence.
+A. Duplicate the project
+B. Edit content strings
+C. Test HTML links
+D. Replace thumbnail assets
+E. Test JavaScript
+F. Edit Blender scene
+G. Export GLB
+H. Replace room.glb
+I. Test interaction
+J. Test responsive behaviour
+K. Deploy
+L. Test deployed URL
+For content-only changes, there is normally no reason to re-export the
+GLB.
+For scene changes, retain the previous GLB until the replacement has
+been tested.
+======================================================================
+24. EXAMPLE SLOT CONFIGURATION
+A more structured configuration can be used when the portfolio contains
+multiple visual slots.
+--- CODE START ---
+const slotConfig = [
+{
+    id: "slot01",
+
+
+    objectName:
+        "PortfolioButton",
+
+
+    title:
+        "DUBE-Dropleton Index",
+
+
+    media:
+        "./assets/images/ddi.webp",
+
+
+    action: () =>
+        location.href =
+            "./ddi-index/index.html"
+},
+
+
+{
+    id: "slot02",
+
+
+    objectName:
+        "LinkedInButton",
+
+
+    title:
+        "LinkedIn Profile",
+
+
+    media:
+        "./assets/images/linkedin.webp",
+
+
+    action: () =>
+        window.open(
+            "https://www.linkedin.com/",
+            "_blank",
+            "noopener,noreferrer"
+        )
+}
+
+
+];
+--- CODE END ---
+A binding function can then associate these definitions with scene
+objects:
+--- CODE START ---
+function bindSlots(scene) {
+for (const slot of slotConfig) {
+
+
+    const object =
+        scene.getObjectByName(
+            slot.objectName
+        );
+
+
+    if (!object) {
+
+
+        console.warn(
+            "Missing portfolio object:",
+            slot.objectName
+        );
+
+
+        continue;
+    }
+
+
+    object.userData.slot =
+        slot;
+
+
+    interactiveObjects.push(
+        object
+    );
+}
+
+
+}
+--- CODE END ---
+This keeps the Blender object name separate from the content displayed
+when that object is selected.
+======================================================================
+25. WHAT SHOULD NOT BE CHANGED CASUALLY
+Treat the following as integration points until their dependencies are
+understood.
+      1. GLB object names used by JavaScript.
+      2. GLB hierarchy around interactive meshes.
+      3. Draco directory structure.
+      4. Module import paths.
+      5. HTML element IDs.
+      6. Shader uniform names.
+      7. Shader loading mechanisms.
+      8. Asset filename case.
+      9. Canvas/container IDs.
+      10. Build-generated filenames.
+      11. Loader configuration.
+      12. Camera targets.
+      13. Animation names.
+      14. External asset paths.
+A visually harmless change in Blender can therefore have a runtime
+consequence.
+======================================================================
+26. FINAL PRE-DEPLOYMENT CHECKLIST
+[ ] The .blend master has been saved separately.
+[ ] The GLB contains the expected scene hierarchy.
+[ ] Interactive object names match runtime references.
+[ ] The Draco decoder path resolves.
+[ ] JavaScript modules resolve.
+[ ] CSS resolves.
+[ ] Images resolve.
+[ ] Video/WebP assets resolve.
+[ ] Filename case is consistent.
+[ ] The camera resizes correctly.
+[ ] Interactive objects work after loading.
+[ ] Overlays appear correctly.
+[ ] Overlays do not block unintended pointer input.
+[ ] External links work.
+[ ] The project works through localhost.
+[ ] The deployed URL has been tested.
+[ ] The browser console contains no normal-operation errors.
+[ ] The project has been tested after replacing room.glb.
+[ ] The previous working version has been retained.
+======================================================================
+APPENDIX A — USEFUL COMMANDS
+START A LOCAL SERVER
+python -m http.server 8000
+CONVERT AN MP4 PREVIEW TO ANIMATED WEBP
+ffmpeg -i input.mp4
+-vf "fps=12,scale=960:-1"
+-c:v libwebp
+-loop 0
+output.webp
+POWERSHELL: INSPECT PROJECT FILES
+Get-ChildItem -Recurse
+SEARCH JAVASCRIPT FOR THE GLB
+Select-String -Path .\*.js
+-Pattern "room.glb"
+SEARCH FOR OBJECT REFERENCES
+Select-String -Path .\*.js
+-Pattern "getObjectByName"
+SEARCH FOR DRACO REFERENCES
+Select-String -Path .\*.js
+-Pattern "DRACOLoader"
+======================================================================
+APPENDIX B — MINIMAL RUNTIME SKELETON
+--- CODE START ---
+import * as THREE from "three";
+import {
+GLTFLoader
+} from "three/addons/loaders/GLTFLoader.js";
+import {
+DRACOLoader
+} from "three/addons/loaders/DRACOLoader.js";
+const scene =
+new THREE.Scene();
+const camera =
+new THREE.PerspectiveCamera(
+45,
+window.innerWidth /
+window.innerHeight,
+0.1,
+1000
+);
+const renderer =
+new THREE.WebGLRenderer({
+antialias: true,
+alpha: true
+});
+renderer.setSize(
+window.innerWidth,
+window.innerHeight
+);
+document
+.querySelector("#portfolio-root")
+.appendChild(
+renderer.domElement
+);
+const draco =
+new DRACOLoader();
+draco.setDecoderPath(
+"./draco/"
+);
+const loader =
+new GLTFLoader();
+loader.setDRACOLoader(
+draco
+);
+const interactiveObjects = [];
+loader.load(
+"./room.glb",
+(gltf) => {
+
+
+    scene.add(
+        gltf.scene
+    );
+
+
+
+
+    const target =
+        gltf.scene.getObjectByName(
+            "PortfolioButton"
+        );
+
+
+
+
+    if (target) {
+
+
+        interactiveObjects.push(
+            target
+        );
+
+
+    }
+
+
+
+
+    animate();
+}
+
+
+);
+function animate() {
+requestAnimationFrame(
+    animate
+);
+
+
+
+
+renderer.render(
+    scene,
+    camera
+);
+
+
+}
+window.addEventListener(
+"resize",
+() => {
+
+
+    const width =
+        window.innerWidth;
+
+
+    const height =
+        window.innerHeight;
+
+
+
+
+    renderer.setSize(
+        width,
+        height
+    );
+
+
+
+
+    camera.aspect =
+        width / height;
+
+
+
+
+    camera.updateProjectionMatrix();
+
+
+}
+
+
+);
+--- CODE END ---
+======================================================================
+INDEPENDENT TECHNICAL REVIEW WORKSHEET
+Use this section to inspect the guide against your own knowledge of:
+Three.js
+WebGL
+glTF / GLB
+Blender
+Draco
+GLSL
+JavaScript modules
+Browser networking
+HTML / CSS
+Static deployment
+GitHub Pages
+Asset pipelines
+Record anything that appears questionable.
+________________
+
+
+      1. ________________
+________________
+________________
+________________
+
+
+      2. ________________
+________________
+________________
+________________
+
+
+      3. ________________
+________________
+________________
+________________
+
+
+      4. ________________
+________________
+________________
+________________
+
+
+      5. ________________
+________________
+________________
+________________
+
+
+      6. ________________
+________________
+________________
+________________
+
+
+      7. ________________
+________________
+________________
+________________
+
+
+      8. ________________
+________________
+________________
+________________
+
+
+      9. ________________
+________________
+________________
+________________
+
+
+      10. ________________
+________________
+________________
+________________
+
+
+      11. ________________
+________________
+________________
+________________
+
+
+      12. ________________
+________________
+________________
+________________
+
+
+      13. ________________
+________________
+________________
+________________
+
+
+      14. ________________
+________________
+________________
+________________
+
+
+      15. ________________
+________________
+________________
+________________
+
+
+      16. ________________
+________________
+________________
+________________
+
+
+      17. ________________
+________________
+________________
+________________
+
+
+      18. ________________
+________________
+________________
+________________
+
+
+      19. ________________
+________________
+________________
+________________
+
+
+      20. ________________
+________________
+________________
+________________
+
+
+      21. ________________
+________________
+________________
+________________
+
+
+      22. ________________
+________________
+________________
+________________
+
+
+      23. ________________
+________________
+________________
+________________
+
+
+      24. ________________
+________________
+________________
+________________
+
+
+      25. ________________
+________________
+________________
+________________
+
+
+      26. ________________
+________________
+________________
+________________
+
+
+      27. ________________
+________________
+________________
+________________
+
+
+      28. ________________
+________________
+________________
+________________
+
+
+      29. ________________
+________________
+________________
+________________
+
+
+      30. ________________
+________________
+________________
+
+
+END OF DOCUMENT
